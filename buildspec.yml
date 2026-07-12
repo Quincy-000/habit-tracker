@@ -11,7 +11,7 @@ phases:
       python: 3.12
     commands:
       - echo "Installing Trivy..."
-      - wget -qO- https://github.com/aquasecurity/trivy/releases/latest/download/trivy_Linux-64bit.tar.gz | tar xz -C /usr/local/bin trivy
+      - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
       - pip install -r requirements.txt
 
   pre_build:

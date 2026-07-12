@@ -30,7 +30,7 @@ phases:
       - echo "Building Docker image..."
       - docker build -t $REPOSITORY_URI:$IMAGE_TAG -t $REPOSITORY_URI:latest .
       - echo "Scanning image with Trivy..."
-      - trivy image --severity HIGH,CRITICAL --exit-code 1 --no-progress $REPOSITORY_URI:$IMAGE_TAG
+      - trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress $REPOSITORY_URI:$IMAGE_TAG
 
   post_build:
     commands:

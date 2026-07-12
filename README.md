@@ -114,6 +114,8 @@ docker run --rm -p 5000:5000 habit-tracker
  <img width="1365" height="526" alt="Screenshot 2026-07-12 224525 - Copy" src="https://github.com/user-attachments/assets/6ac1769b-cbde-4319-acda-18e45f2421cd" />
  <img width="908" height="593" alt="Screenshot 2026-07-12 155024" src="https://github.com/user-attachments/assets/162ecf42-8143-4b85-8171-063d777cd24c" />
  <img width="1361" height="507" alt="Screenshot 2026-07-12 224650 - Copy" src="https://github.com/user-attachments/assets/48492094-c4fc-4e88-a473-c0b3380accb0" />
+ <img width="1365" height="435" alt="image" src="https://github.com/user-attachments/assets/a1bbed4d-2f60-4681-8826-7cbeb25f420f" />
+
  
 
 

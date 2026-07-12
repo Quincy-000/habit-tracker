@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Habit Tracker</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --surface: #131d33;
+      --surface-alt: #1f2a4d;
+      --text: #e7eef7;
+      --muted: #9bb1ce;
+      --accent: #4f8cff;
+      --accent-weak: #6699ff;
+      --success: #3dd598;
+      --danger: #ff7b7b;
+      --radius: 18px;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top left, rgba(79, 140, 255, 0.2), transparent 25%),
+                  linear-gradient(180deg, #09101f 0%, #0d162a 100%);
+      color: var(--text);
+      padding: 2rem;
+    }
+
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      display: grid;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 4vw, 4rem);
+      line-height: 1;
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 40rem;
+    }
+
+    .panel {
+      background: rgba(17, 28, 52, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      margin-bottom: 1.5rem;
+    }
+
+    .section h2 {
+      font-size: 1.1rem;
+      margin-bottom: 0.9rem;
+      letter-spacing: 0.02em;
+    }
+
+    .status-box {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .status-box span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 0.95rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .status-box strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .habit-list {
+      list-style: none;
+      display: grid;
+      gap: 0.85rem;
+      padding: 0;
+      margin: 0;
+    }
+
+    .habit-item {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 1rem;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 1rem 1.2rem;
+    }
+
+    .habit-name {
+      color: var(--text);
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .habit-status {
+      justify-self: end;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.85rem 1.2rem;
+      color: #fff;
+      background: linear-gradient(135deg, #4f8cff, #6ab0ff);
+      border: none;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 700;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+      box-shadow: 0 16px 28px rgba(79, 140, 255, 0.28);
+    }
+
+    .footer {
+      margin-top: 2rem;
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <div>
+        <h1>Habit Tracker</h1>
+        <p>Track daily progress with a clean, browser-based habit dashboard. Log habits with one click and see what you've done today.</p>
+      </div>
+      <div class="status-box">
+        <span><strong>Today:</strong> {{ today }}</span>
+        <span><strong>Completed:</strong> {{ done|length }}</span>
+        <span><strong>Remaining:</strong> {{ remaining|length }}</span>
+      </div>
+    </div>
+
+    <div class="panel section">
+      <h2>Completed today</h2>
+      {% if done %}
+        <div class="status-box">
+          {% for habit in done %}
+            <span>✅ {{ habit }}</span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p style="color: var(--muted);">No habits logged yet. Tap a button below to log one.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel section">
+      <h2>Log a habit</h2>
+      <ul class="habit-list">
+        {% for habit in habits %}
+          <li class="habit-item">
+            <div class="habit-name">{{ habit }}</div>
+            <div class="habit-status">{% if habit in done %}Logged{% else %}Not logged{% endif %}</div>
+            <a class="button" href="{{ url_for('log_route', habit_id=loop.index) }}">Log</a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="footer">
+      Built with Flask and local JSON storage — perfect for container + ECS demo deployment.
+    </div>
+  </div>
+</body>
+</html>

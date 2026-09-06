@@ -4,60 +4,80 @@ Habit Tracker CLI + Flask web app — Track your daily habits (skips, study, dum
 Built by Quincy + Hermes | June 2026
 """
 
-import json
+import os
 import sys
 from datetime import date, timedelta
-from pathlib import Path
 
+import psycopg
 from flask import Flask, render_template, redirect, url_for
-
-DATA_FILE = Path.home() / ".habits.json"
 
 # Default habits you can track
 HABITS = [
-    "1. Skips Morning (300)",
-    "2. Skips Evening (500)",
-    "3. AWS Study",
-    "4. Dumbbells",
-    "5. Reading",
-    "6. Other"
+    "Skips Morning (300)",
+    "Skips Evening (500)",
+    "AWS Study",
+    "Dumbbells",
+    "Reading",
+    "Other"
 ]
+
+# Inside the compose network the host is "db"; from the host machine
+# (CLI / psql) it is localhost, via the published port 5432.
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql://habits:habits@localhost:5432/habits"
+)
+
+
+def get_connection():
+    return psycopg.connect(DATABASE_URL)
+
 
 app = Flask(__name__)
 
 
 def load_data():
-    """Load saved habits from JSON file."""
-    if DATA_FILE.exists():
-        with open(DATA_FILE) as f:
-            return json.load(f)
-    return {}
-
-
-def save_data(data):
-    """Save habits to JSON file."""
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    """Load all habit logs from the database, shaped like the old JSON."""
+    data = {}
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT habits.name, logs.log_date
+                FROM logs
+                JOIN habits ON logs.habit_id = habits.id
+            """)
+            for name, log_date in cur.fetchall():
+                data.setdefault(name, []).append(str(log_date))
+    return data
 
 
 def log_habit(habit_name, verbose=True):
     """Record that you did a habit today."""
-    data = load_data()
-    today = str(date.today())
+    today = date.today()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM habits WHERE name = %s", (habit_name,))
+            habit_id = cur.fetchone()[0]
 
-    if habit_name not in data:
-        data[habit_name] = []
+            cur.execute(
+                """
+                INSERT INTO logs (habit_id, log_date)
+                VALUES (%s, %s)
+                ON CONFLICT (habit_id, log_date) DO NOTHING
+                RETURNING id
+                """,
+                (habit_id, today)
+            )
+            inserted = cur.fetchone()
+        conn.commit()
 
-    if today not in data[habit_name]:
-        data[habit_name].append(today)
-        save_data(data)
-        if verbose:
+    if verbose:
+        if inserted:
             print(f"  ✅ Logged '{habit_name}' for {today}")
-    else:
-        if verbose:
+        else:
             print(f"  ⏭️  Already logged '{habit_name}' today!")
 
-    return today
+    return str(today)
 
 
 def get_today_status():
@@ -240,18 +260,7 @@ def show_all_time():
 
 def fast_log(habit_name):
     """Direct log without the menu (for CLI args)."""
-    data = load_data()
-    today = str(date.today())
-
-    if habit_name not in data:
-        data[habit_name] = []
-
-    if today not in data[habit_name]:
-        data[habit_name].append(today)
-        save_data(data)
-        print(f"  ✅ Logged '{habit_name}'")
-    else:
-        print(f"  ⏭️  Already logged '{habit_name}' today")
+    log_habit(habit_name)
 
 
 @app.route("/")

@@ -7,3 +7,10 @@ __pycache__/
 *.pem
 *.pem:Zone.Identifier
 .vscode/
+
+# Chapter 1 (archived pipeline) local artifacts — kept locally, not in the repo
+pipeline.json
+task-definition.json
+explore_cards.py
+q-dev-chat-*.md
+buildspec.yml

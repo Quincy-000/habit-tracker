@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-habits}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-habits}
+      POSTGRES_DB: ${POSTGRES_DB:-habits}
+    volumes:
+      - habits_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-habits} -d ${POSTGRES_DB:-habits}"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  web:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-habits}:${POSTGRES_PASSWORD:-habits}@db:5432/${POSTGRES_DB:-habits}
+    ports:
+      - "5000:5000"
+
+volumes:
+  habits_data:

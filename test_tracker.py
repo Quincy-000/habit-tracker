@@ -112,3 +112,26 @@ def test_flask_log_route_logs_habit_and_redirects():
     assert response.status_code == 302  # redirect back to home
     data = tracker.load_data()
     assert tracker.HABITS[0] in data
+
+
+def test_unlog_habit_removes_today_log():
+    tracker.log_habit("Reading", verbose=False)
+    assert "Reading" in tracker.load_data()
+    assert tracker.unlog_habit("Reading") is True
+    assert "Reading" not in tracker.load_data()
+
+
+def test_unlog_habit_no_log_is_noop():
+    assert tracker.unlog_habit("Reading") is False
+
+
+def test_unlog_unknown_habit_returns_false():
+    assert tracker.unlog_habit("No Such Habit") is False
+
+
+def test_flask_unlog_route_removes_today_and_redirects():
+    client = tracker.app.test_client()
+    tracker.log_habit(tracker.HABITS[0], verbose=False)
+    response = client.get("/unlog/1")
+    assert response.status_code == 302  # redirect back to home
+    assert tracker.HABITS[0] not in tracker.load_data()

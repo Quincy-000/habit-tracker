@@ -80,6 +80,39 @@ def log_habit(habit_name, verbose=True):
     return str(today)
 
 
+def unlog_habit(habit_name, verbose=True):
+    """Remove today's log for a habit (undo a mistaken check-in)."""
+    today = date.today()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM habits WHERE name = %s", (habit_name,))
+            row = cur.fetchone()
+            if row is None:
+                if verbose:
+                    print(f"  No habit named '{habit_name}'.")
+                return False
+            habit_id = row[0]
+
+            cur.execute(
+                """
+                DELETE FROM logs
+                WHERE habit_id = %s AND log_date = %s
+                RETURNING id
+                """,
+                (habit_id, today)
+            )
+            deleted = cur.fetchone()
+        conn.commit()
+
+    if verbose:
+        if deleted:
+            print(f"  ↩️  Unlogged '{habit_name}' for {today}")
+        else:
+            print(f"  Nothing to unlog — '{habit_name}' wasn't logged today.")
+
+    return bool(deleted)
+
+
 def get_today_status():
     """Return the current day's habits and remaining habits."""
     data = load_data()
@@ -306,6 +339,13 @@ def home():
 def log_route(habit_id):
     if 1 <= habit_id <= len(HABITS):
         log_habit(HABITS[habit_id - 1], verbose=False)
+    return redirect(url_for("home"))
+
+
+@app.route("/unlog/<int:habit_id>")
+def unlog_route(habit_id):
+    if 1 <= habit_id <= len(HABITS):
+        unlog_habit(HABITS[habit_id - 1], verbose=False)
     return redirect(url_for("home"))
 
 

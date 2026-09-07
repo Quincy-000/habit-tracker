@@ -148,6 +148,14 @@
       box-shadow: 0 16px 28px rgba(79, 140, 255, 0.28);
     }
 
+    .button.unlog {
+      background: linear-gradient(135deg, #ff7b7b, #ff9d9d);
+    }
+
+    .button.unlog:hover {
+      box-shadow: 0 16px 28px rgba(255, 123, 123, 0.25);
+    }
+
     .footer {
       margin-top: 2rem;
       color: rgba(255, 255, 255, 0.65);
@@ -189,14 +197,18 @@
           <li class="habit-item">
             <div class="habit-name">{{ habit }}</div>
             <div class="habit-status">{% if habit in done %}Logged{% else %}Not logged{% endif %}</div>
-            <a class="button" href="{{ url_for('log_route', habit_id=loop.index) }}">Log</a>
+            {% if habit in done %}
+              <a class="button unlog" href="{{ url_for('unlog_route', habit_id=loop.index) }}">↩ Unlog</a>
+            {% else %}
+              <a class="button" href="{{ url_for('log_route', habit_id=loop.index) }}">Log</a>
+            {% endif %}
           </li>
         {% endfor %}
       </ul>
     </div>
 
     <div class="footer">
-      Built with Flask and local JSON storage — perfect for container + ECS demo deployment.
+      Built with Flask and PostgreSQL — data survives restarts.
     </div>
   </div>
 </body>

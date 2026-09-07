@@ -9,6 +9,5 @@ venv/
 .git
 .gitignore
 *.log
-test_tracker.py
 .pytest_cache/
 __pycache__/

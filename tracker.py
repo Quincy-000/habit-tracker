@@ -108,68 +108,101 @@ def show_today():
 
 def show_streak(habit_name):
     """Show how many consecutive days you've done a habit."""
-    data = load_data()
-    dates = sorted(data.get(habit_name, []), reverse=True)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM habits WHERE name = %s", (habit_name,))
+            row = cur.fetchone()
+            if row is None:
+                print(f"  No entries for '{habit_name}' yet.")
+                return
+            habit_id = row[0]
 
-    if not dates:
-        print(f"  No entries for '{habit_name}' yet.")
-        return
+            cur.execute("""
+                WITH numbered AS (
+                    SELECT
+                        log_date,
+                        ROW_NUMBER() OVER (ORDER BY log_date) AS rn
+                    FROM logs
+                    WHERE habit_id = %s
+                ),
+                islands AS (
+                    SELECT
+                        log_date,
+                        log_date - (rn * INTERVAL '1 day') AS island_key
+                    FROM numbered
+                ),
+                grouped AS (
+                    SELECT
+                        MIN(log_date) AS island_start,
+                        MAX(log_date) AS island_end,
+                        COUNT(*) AS island_length
+                    FROM islands
+                    GROUP BY island_key
+                )
+                SELECT COALESCE(
+                    (SELECT island_length FROM grouped
+                     WHERE island_end >= CURRENT_DATE - 1
+                     ORDER BY island_end DESC
+                     LIMIT 1),
+                    0
+                ) AS current_streak;
+            """, (habit_id,))
+            streak = cur.fetchone()[0]
 
-    streak = 0
-    check_date = date.today()
-
-    for d in dates:
-        if d == str(check_date):
-            streak += 1
-            check_date -= timedelta(days=1)
-        elif d == str(check_date - timedelta(days=1)):
-            streak += 1
-            check_date -= timedelta(days=1)
-        else:
-            break
+            cur.execute("SELECT COUNT(*) FROM logs WHERE habit_id = %s", (habit_id,))
+            total_logs = cur.fetchone()[0]
 
     print(f"\n  🔥 Streak for '{habit_name}': {streak} day{'s' if streak != 1 else ''}")
-    print(f"  Total logs: {len(dates)}")
+    print(f"  Total logs: {total_logs}")
     return streak
 
 
 def show_week():
     """Show a weekly calendar of your habits."""
-    data = load_data()
     today = date.today()
+
+    day_labels = [str(today - timedelta(days=i)) for i in range(6, -1, -1)]
+
+    week_data = {h: [] for h in HABITS}
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT habits.name, logs.log_date
+                FROM habits
+                LEFT JOIN logs
+                    ON habits.id = logs.habit_id
+                    AND logs.log_date >= CURRENT_DATE - INTERVAL '6 days'
+                ORDER BY habits.name, logs.log_date
+            """)
+            for name, log_date in cur.fetchall():
+                if log_date is not None:
+                    week_data[name].append(str(log_date))
 
     print(f"\n  📊 Last 7 Days ({(today - timedelta(days=6)).strftime('%a %d')} → {today.strftime('%a %d')}):")
     print()
 
-    all_habits = sorted(data.keys())
-    if not all_habits:
-        print("  No habits logged yet. Start by logging something!")
-        return
-
     header = "        "
-    day_labels = []
-    for i in range(6, -1, -1):
-        d = today - timedelta(days=i)
+    for dl in day_labels:
+        d = date.fromisoformat(dl)
         header += f" {d.strftime('%a')} "
-        day_labels.append(str(d))
     print(header)
     print()
 
-    for habit in all_habits:
+    for habit in sorted(week_data.keys()):
         short_name = habit
         if len(short_name) > 21:
             short_name = short_name[:18] + "..."
 
         line = f"  {short_name:21s}"
         for dl in day_labels:
-            if dl in data.get(habit, []):
+            if dl in week_data.get(habit, []):
                 line += "  ✅"
             else:
                 line += "  ··"
         print(line)
 
     print()
-    show_today_summary(data, today, day_labels)
+    show_today_summary(week_data, today, day_labels)
 
 
 def show_today_summary(data, today, day_labels):

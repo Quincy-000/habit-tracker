@@ -9,6 +9,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY tracker.py .
+COPY conftest.py .
+COPY test_tracker.py .
 COPY templates ./templates
 
 EXPOSE 5000

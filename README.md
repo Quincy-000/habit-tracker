@@ -1,12 +1,12 @@
 # Habit Tracker — Flask + PostgreSQL (Docker Compose)
 
-A small Flask habit-tracking app (web UI + CLI) with a real PostgreSQL backend, run entirely with Docker Compose. It started life as the vehicle for a production-style CI/CD pipeline on AWS (Chapter 1); it now lives as a local, zero-cost app whose data survives restarts (Chapter 2).
+A small Flask habit-tracking app (web UI + CLI) with a real PostgreSQL backend, run entirely with Docker Compose. It started life as the vehicle for a production-style CI/CD pipeline on AWS (Chapter 1); it now lives as a local, zero-cost app whose data survives restarts (Chapter 2), whose streak and weekly-grid logic runs as SQL in Postgres, and whose test suite exercises the real database through a disposable `habits_test` copy (Chapter 3).
 
 **Chapter 2 TL;DR:** the app originally stored logs in a JSON file at `~/.habits.json` — which was **ephemeral inside a container**, so every redeploy wiped every logged habit. The fix: replace the JSON file with Postgres, managed by Docker Compose with a named volume. Log a habit, restart the stack, it's still there.
 
 ---
 
-## Chapter 2 — PostgreSQL backend (current)
+## Chapter 2 — PostgreSQL backend
 
 ### The problem
 
@@ -84,6 +84,85 @@ Data survives because it lives in the named volume, not in the container's writa
 
 ---
 
+## Chapter 3 — Logic in SQL; tests against a real Postgres (current)
+
+### The gap after Chapter 2
+
+Two parts of the app still lagged the Postgres move. The streak counter and the last-7-days grid were computed in Python over rows fetched from the DB — logic the database should own. And the original 11-test suite still monkeypatched a JSON `DATA_FILE` that no longer existed; it was testing a storage layer the app had stopped using.
+
+### Last-7-days grid — LEFT JOIN, filter inside the ON
+
+A naive join drops habits with no logs that week. Putting the date window in the ON clause keeps every habit in the result; habits with no logs come back with NULL dates instead of disappearing:
+
+```sql
+SELECT habits.name, logs.log_date
+FROM habits
+LEFT JOIN logs
+    ON habits.id = logs.habit_id
+    AND logs.log_date >= CURRENT_DATE - INTERVAL '6 days'
+ORDER BY habits.name, logs.log_date
+```
+
+### Streak — gaps-and-islands, with a grace day
+
+"Current streak" means the most recent consecutive run of days — allowing today to be unlogged, since you may log it later tonight. Classic gaps-and-islands: number the rows, subtract the row number from each date (consecutive days land on the same key), group into islands, then take the latest island that ends today or yesterday:
+
+```sql
+WITH numbered AS (
+    SELECT log_date,
+           ROW_NUMBER() OVER (ORDER BY log_date) AS rn
+    FROM logs
+    WHERE habit_id = %s
+),
+islands AS (
+    SELECT log_date,
+           log_date - (rn * INTERVAL '1 day') AS island_key
+    FROM numbered
+),
+grouped AS (
+    SELECT MIN(log_date) AS island_start,
+           MAX(log_date) AS island_end,
+           COUNT(*)      AS island_length
+    FROM islands
+    GROUP BY island_key
+)
+SELECT COALESCE(
+    (SELECT island_length FROM grouped
+     WHERE island_end >= CURRENT_DATE - 1
+     ORDER BY island_end DESC
+     LIMIT 1),
+    0
+) AS current_streak;
+```
+
+Both queries were validated against hand-seeded data before being wired into `tracker.py`.
+
+### Phase 3 — the test suite grows a real database
+
+The old isolation trick — redirect `DATA_FILE` to a temp path — has no equivalent once storage is Postgres and every DB function opens its own connection. Options weighed:
+
+- **Inject a connection/cursor into every function** (transaction-rollback isolation): correct, but every DB function gains an optional-parameter + skip-commit branch — production code reshaped for tests, and a future function that forgets the guard would silently commit test rows into the real database.
+- **Delete-by-diff** (record existing IDs before, delete new ones after): zero prod changes, but cleanup bookkeeping grows with every table a test touches — and it runs against the same database that holds real logs.
+- **Chosen: a separate `habits_test` database with a truncate-and-reseed fixture.** Same Postgres container, zero changes to `tracker.py`. `conftest.py` points the module at `habits_test`, and an autouse fixture runs `TRUNCATE habits, logs RESTART IDENTITY CASCADE` then reseeds the six habits before every test. Nothing a test writes can reach real data.
+
+One-time setup (the container only auto-creates the `habits` database):
+
+```bash
+docker compose exec db psql -U habits -c "CREATE DATABASE habits_test;"
+docker compose exec db psql -U habits -d habits_test -f schema.sql
+```
+
+Run the suite inside the compose network — the app resolves the database as host `db`, and pytest/psycopg live in the image, not the host venv:
+
+```bash
+docker compose exec web pytest -q
+# 11 passed
+```
+
+Two gotchas from wiring this up: the image originally contained no tests at all — `test_tracker.py` was excluded by `.dockerignore` and neither it nor `conftest.py` had `COPY` lines in the Dockerfile — and the reset runs *before* each test, so a finished run leaves the last test's rows in `habits_test` (harmless; wiped on the next run).
+
+---
+
 ## Chapter 1 (archived) — Containerized CI/CD Pipeline on AWS
 
 The app was originally the vehicle for learning a full, production-style CI/CD pipeline: automated testing, container vulnerability scanning, a manual approval gate, and zero-downtime deployment to AWS ECS Fargate behind a load balancer. **The app itself was intentionally simple. The pipeline was the point.** Infrastructure was torn down after screenshots to avoid ongoing cost; the code artifacts (`buildspec.yml`, `task-definition.json`, `pipeline.json`) are retained locally.
@@ -148,6 +227,7 @@ ECS Fargate Service ── Application Load Balancer ── Public URL
 - **App:** Python, Flask, Jinja2 templates
 - **Database:** PostgreSQL 16 (Docker Compose, named volume, healthcheck-gated startup)
 - **DB access:** psycopg 3, raw SQL (no ORM — the point is learning SQL)
+- **Testing:** pytest against a disposable `habits_test` database (truncate + reseed per test)
 - **Containerization:** Docker Compose v2 (`python:3.12-slim-bookworm` base, OS-patched)
 - **Chapter 1 stack (archived):** AWS CodePipeline/CodeBuild, ECR, ECS Fargate, ALB, Trivy
 
@@ -156,7 +236,8 @@ ECS Fargate Service ── Application Load Balancer ── Public URL
 ```
 .
 ├── tracker.py              # Flask app + CLI, reads/writes Postgres
-├── test_tracker.py         # pytest suite (being migrated to the DB layer)
+├── test_tracker.py         # pytest suite — DB-backed, 11 tests (runs in the web container)
+├── conftest.py             # points tests at habits_test; truncate + reseed per test
 ├── templates/
 │   └── index.html          # Web UI
 ├── Dockerfile
@@ -170,6 +251,5 @@ ECS Fargate Service ── Application Load Balancer ── Public URL
 
 ## Status
 
-- ✅ Chapter 2 core: Postgres backend via Compose, dedupe in SQL, persistence across restarts
-- 🔜 Streak + last-7-days views as SQL queries (currently plain Python over fetched rows)
-- 🔜 Tests migrated to the DB layer
+- ✅ Chapter 2: Postgres backend via Compose, dedupe in SQL, persistence across restarts
+- ✅ Chapter 3: streak + last-7-days as SQL (gaps-and-islands / LEFT JOIN); 11 tests against the real DB via `habits_test`, green in-container

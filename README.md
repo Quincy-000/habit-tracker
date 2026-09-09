@@ -222,6 +222,12 @@ ECS Fargate Service ── Application Load Balancer ── Public URL
 
 ---
 
+## Incidents
+
+- [Postmortem: habit data lost on every redeploy (JSON-file storage)](docs/incidents/2026-09-06-json-file-data-loss.md) — the Chapter 2 problem, told as an incident: timeline, root cause, blast radius, prevention.
+
+---
+
 ## Tech stack
 
 - **App:** Python, Flask, Jinja2 templates
